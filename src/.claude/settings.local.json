@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p build/classes)",
+      "Bash(javac -cp \"lib/mysql-connector-j-9.2.0.jar\" -d build/classes -sourcepath src src/view/FormLogin.java)",
+      "Bash(rm -rf build/classes)",
+      "Bash(java -cp \"build/classes;lib/mysql-connector-j-9.2.0.jar\" view.FormLogin)",
+      "Bash(javac -cp \"lib/mysql-connector-j-9.2.0.jar\" -d build/classes -sourcepath src src/view/FormLogin.java src/view/FormMenuUtama.java src/view/FormDashboardKurir.java)",
+      "Bash(javac -cp \"lib/mysql-connector-j-9.2.0.jar\" -d build/classes -sourcepath src src/view/FormMenuUtama.java)"
+    ]
+  }
+}
