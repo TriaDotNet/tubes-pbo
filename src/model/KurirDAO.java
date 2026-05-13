@@ -26,18 +26,30 @@ public class KurirDAO implements IDAO {
 
     @Override
     public void insert() {
+        insertAndGetId();
+    }
+
+    public int insertAndGetId() {
         String sql = "INSERT INTO tabel_kurir (nama_kurir, no_plat, no_hp) VALUES (?, ?, ?)";
         try (Connection conn = KoneksiDB.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql,
+                     java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, kurir.getNama_kurir());
             ps.setString(2, kurir.getNo_plat());
             ps.setString(3, kurir.getNo_hp());
             ps.executeUpdate();
-            JOptionPane.showMessageDialog(null, "Data kurir berhasil ditambahkan.");
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                if (keys.next()) {
+                    int id = keys.getInt(1);
+                    kurir.setId_kurir(id);
+                    return id;
+                }
+            }
         } catch (SQLException ex) {
             JOptionPane.showMessageDialog(null, "Gagal insert kurir: " + ex.getMessage(),
                     "Error", JOptionPane.ERROR_MESSAGE);
         }
+        return -1;
     }
 
     @Override

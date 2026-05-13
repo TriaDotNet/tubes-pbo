@@ -1,16 +1,64 @@
-# PETUNJUK PEMBUATAN UI DENGAN NETBEANS FORM DESIGNER (DRAG & DROP)
+# PETUNJUK PEMBUATAN UI DENGAN NETBEANS FORM DESIGNER (DRAG & DROP) — v2 MULTI-ROLE
 
-Dokumen ini berisi daftar komponen, **variable name**, properti, dan kode listener yang harus kamu buat untuk tiap form di package `view`. Ikuti urutannya — variable name WAJIB sama persis karena dipakai oleh controller.
+Dokumen ini berisi daftar komponen, **variable name**, properti, dan kode listener yang harus kamu buat untuk tiap form di package `view`. Variable name WAJIB sama persis karena dipakai oleh controller.
+
+> **Update v2:** ada **2 role login (Admin & Kurir)** dan form baru `FormDashboardKurir`. Kolom `status_paket` ditambahkan ke tabel paket.
 
 ---
 
 ## 0. PERSIAPAN AWAL
 
 ### Library yang harus ditambahkan
-1. `mysql-connector-java.jar`
-2. `flatlaf-3.x.x.jar` (download dari https://github.com/JFormDesigner/FlatLaf/releases)
+- `mysql-connector-java.jar`
 
 **Cara:** klik kanan project → Properties → Libraries → Add JAR/Folder
+
+### Struktur database terbaru
+
+```sql
+DROP DATABASE IF EXISTS db_ekspedisi;
+CREATE DATABASE db_ekspedisi;
+USE db_ekspedisi;
+
+CREATE TABLE tabel_kurir (
+    id_kurir INT AUTO_INCREMENT PRIMARY KEY,
+    nama_kurir VARCHAR(100),
+    no_plat VARCHAR(20),
+    no_hp VARCHAR(15)
+);
+
+CREATE TABLE tabel_user (
+    id_user INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    password VARCHAR(50),
+    role VARCHAR(20),
+    id_kurir INT NULL,
+    FOREIGN KEY (id_kurir) REFERENCES tabel_kurir(id_kurir)
+);
+
+CREATE TABLE tabel_paket (
+    no_resi VARCHAR(30) PRIMARY KEY,
+    nama_pengirim VARCHAR(100),
+    nama_penerima VARCHAR(100),
+    alamat_tujuan TEXT,
+    jenis_layanan VARCHAR(50),
+    berat_kg DOUBLE,
+    total_biaya DOUBLE,
+    status_paket VARCHAR(50),
+    id_kurir INT,
+    FOREIGN KEY (id_kurir) REFERENCES tabel_kurir(id_kurir)
+);
+
+-- Data contoh
+INSERT INTO tabel_kurir (nama_kurir, no_plat, no_hp) VALUES
+('Budi Santoso', 'B 1234 XYZ', '081234567890'),
+('Agus Wijaya', 'B 5678 ABC', '085678901234');
+
+INSERT INTO tabel_user (username, password, role, id_kurir) VALUES
+('admin', 'admin', 'Admin', NULL),
+('budi', 'budi123', 'Kurir', 1),
+('agus', 'agus123', 'Kurir', 2);
+```
 
 ### Cara bikin JFrame Form baru di NetBeans
 Klik kanan package `view` → New → **JFrame Form** → masukkan nama class.
@@ -18,15 +66,12 @@ Klik kanan package `view` → New → **JFrame Form** → masukkan nama class.
 ### Cara rename variable name komponen
 Klik kanan komponen di Design view → **Change Variable Name** → ketik nama sesuai petunjuk di bawah.
 
-### Cara ubah properti
-Pilih komponen → panel **Properties** di kanan bawah → ubah `text`, `font`, dll.
-
 ### Cara tambah event listener
 Klik kanan komponen → Events → Action → `actionPerformed` (untuk tombol) atau Mouse → `mouseClicked` (untuk tabel).
 
 ---
 
-## 1. FormLogin.java
+## 1. FormLogin.java (Multi-Role)
 
 **JFrame Form baru → nama class: `FormLogin`**
 
@@ -36,14 +81,11 @@ Klik kanan komponen → Events → Action → `actionPerformed` (untuk tombol) a
 | title | `Login - Sistem Manajemen Ekspedisi` |
 | defaultCloseOperation | `EXIT_ON_CLOSE` |
 | resizable | `false` |
-| size | 420 × 480 |
 
-### Daftar Komponen
-| Komponen | Variable Name | Text / Properti |
+### Komponen
+| Komponen | Variable Name | Text |
 |---|---|---|
-| JPanel (header) | `headerPanel` | background biru |
-| JLabel | `lblHeader` | `Sistem Manajemen Ekspedisi` |
-| JLabel | `lblSubHeader` | `Silakan login untuk melanjutkan` |
+| JLabel | `lblJudul` | `SISTEM MANAJEMEN EKSPEDISI` |
 | JLabel | `lblUsername` | `Username` |
 | JTextField | `txtUsername` | (kosong) |
 | JLabel | `lblPassword` | `Password` |
@@ -51,8 +93,9 @@ Klik kanan komponen → Events → Action → `actionPerformed` (untuk tombol) a
 | JButton | `btnLogin` | `Login` |
 | JButton | `btnKeluar` | `Keluar` |
 
-### Event Listener yang harus dibuat
-Klik kanan `btnLogin` → Events → Action → `actionPerformed`, isi:
+### Event Listener
+
+`btnLogin` → Events → Action:
 ```java
 private void btnLoginActionPerformed(java.awt.event.ActionEvent evt) {
     String username = txtUsername.getText().trim();
@@ -65,91 +108,98 @@ private void btnLoginActionPerformed(java.awt.event.ActionEvent evt) {
     }
 
     controller.LoginController login = new controller.LoginController();
-    if (login.authenticate(username, password)) {
-        JOptionPane.showMessageDialog(this, "Login berhasil. Selamat datang, " + username + "!");
-        new FormMenuUtama(username).setVisible(true);
-        dispose();
-    } else {
+    model.User user = login.login(username, password);
+
+    if (user == null) {
         JOptionPane.showMessageDialog(this, "Username atau password salah.",
                 "Login Gagal", JOptionPane.ERROR_MESSAGE);
         txtPassword.setText("");
+        return;
     }
+
+    JOptionPane.showMessageDialog(this,
+            "Login berhasil. Selamat datang, " + user.getUsername() + " (" + user.getRole() + ")");
+
+    if (user.isAdmin()) {
+        new FormMenuUtama(user).setVisible(true);
+    } else if (user.isKurir()) {
+        if (user.getId_kurir() == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Akun kurir belum ditautkan ke data kurir. Hubungi admin.",
+                    "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        new FormDashboardKurir(user).setVisible(true);
+    } else {
+        JOptionPane.showMessageDialog(this,
+                "Role tidak dikenali: " + user.getRole(),
+                "Error", JOptionPane.ERROR_MESSAGE);
+        return;
+    }
+    dispose();
 }
 ```
 
-Klik kanan `btnKeluar` → Events → Action → `actionPerformed`, isi:
+`btnKeluar` → Events → Action:
 ```java
 private void btnKeluarActionPerformed(java.awt.event.ActionEvent evt) {
     System.exit(0);
 }
 ```
 
-### Method main() — ganti bawaan NetBeans jadi seperti ini
-```java
-public static void main(String args[]) {
-    try {
-        javax.swing.UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
-    } catch (Exception ex) {
-        // fallback default LaF
-    }
-    java.awt.EventQueue.invokeLater(() -> new FormLogin().setVisible(true));
-}
-```
-
 ---
 
-## 2. FormMenuUtama.java
+## 2. FormMenuUtama.java (Khusus Admin)
 
 **JFrame Form baru → nama class: `FormMenuUtama`**
 
 ### Properti JFrame
 | Properti | Nilai |
 |---|---|
-| title | `Menu Utama - Sistem Manajemen Ekspedisi` |
+| title | `Menu Utama - Admin` |
 | defaultCloseOperation | `EXIT_ON_CLOSE` |
-| size | 720 × 460 |
 
-### Daftar Komponen
-| Komponen | Variable Name | Text / Properti |
+### Komponen
+| Komponen | Variable Name | Text |
 |---|---|---|
-| JPanel (header) | `headerPanel` | warna biru |
-| JLabel | `lblHeader` | `Dashboard` |
-| JLabel | `lblWelcome` | `Halo, User` |
-| JButton (card) | `btnKurir` | `Manajemen Kurir` |
-| JButton (card) | `btnPaket` | `Manajemen Paket` |
+| JLabel | `lblHeader` | `Dashboard Admin` |
+| JLabel | `lblWelcome` | `Halo, Admin` |
+| JButton | `btnKurir` | `Manajemen Kurir` |
+| JButton | `btnPaket` | `Manajemen Paket` |
 | JButton | `btnLogout` | `Logout` |
 
-### Tambahkan field di class (ketik manual di atas method `FormMenuUtama()`)
+### Tambahkan field & constructor (ketik manual)
 ```java
-private String username = "User";
+private model.User currentUser;
 
 public FormMenuUtama() {
     initComponents();
 }
 
-public FormMenuUtama(String username) {
+public FormMenuUtama(model.User user) {
     initComponents();
-    this.username = username;
-    lblWelcome.setText("Halo, " + username);
+    this.currentUser = user;
+    lblWelcome.setText("Halo, " + user.getUsername());
 }
 ```
 
 ### Event Listener
-Klik kanan `btnKurir` → Events → Action:
+
+`btnKurir` → Action:
 ```java
 private void btnKurirActionPerformed(java.awt.event.ActionEvent evt) {
     new FormKurir().setVisible(true);
 }
 ```
 
-Klik kanan `btnPaket` → Events → Action:
+`btnPaket` → Action:
 ```java
 private void btnPaketActionPerformed(java.awt.event.ActionEvent evt) {
     new FormPaket().setVisible(true);
 }
 ```
 
-Klik kanan `btnLogout` → Events → Action:
+`btnLogout` → Action:
 ```java
 private void btnLogoutActionPerformed(java.awt.event.ActionEvent evt) {
     int confirm = JOptionPane.showConfirmDialog(this,
@@ -163,7 +213,7 @@ private void btnLogoutActionPerformed(java.awt.event.ActionEvent evt) {
 
 ---
 
-## 3. FormKurir.java
+## 3. FormKurir.java (Admin)
 
 **JFrame Form baru → nama class: `FormKurir`**
 
@@ -172,18 +222,8 @@ private void btnLogoutActionPerformed(java.awt.event.ActionEvent evt) {
 |---|---|
 | title | `Manajemen Kurir` |
 | defaultCloseOperation | `DISPOSE_ON_CLOSE` |
-| size | 1000 × 640 |
 
-### Daftar Komponen
-
-**Panel Header (atas):**
-| Komponen | Variable Name | Text |
-|---|---|---|
-| JPanel | `headerPanel` | background biru |
-| JLabel | `lblHeader` | `Manajemen Kurir` |
-| JLabel | `lblSubHeader` | `Kelola data kurir dan armada pengiriman` |
-
-**Panel Form Input (sebelah kiri / atas):**
+### Komponen
 | Komponen | Variable Name | Text / Properti |
 |---|---|---|
 | JLabel | `lblId` | `ID Kurir` |
@@ -194,23 +234,14 @@ private void btnLogoutActionPerformed(java.awt.event.ActionEvent evt) {
 | JTextField | `txtPlat` | (kosong) |
 | JLabel | `lblHp` | `No HP` |
 | JTextField | `txtHp` | (kosong) |
-
-**Panel Tombol (di bawah form input):**
-| Komponen | Variable Name | Text |
-|---|---|---|
 | JButton | `btnTambah` | `Tambah` |
 | JButton | `btnUbah` | `Ubah` |
 | JButton | `btnHapus` | `Hapus` |
 | JButton | `btnBersihkan` | `Bersihkan` |
 | JButton | `btnTutup` | `Tutup` |
+| JScrollPane + JTable | `tblKurir` | (default) |
 
-**Panel Tabel (sebelah kanan / bawah):**
-| Komponen | Variable Name | Properti |
-|---|---|---|
-| JScrollPane | `scrollTable` | berisi `tblKurir` |
-| JTable | `tblKurir` | model default (biarkan, akan di-replace oleh controller) |
-
-### Tambahkan field di class
+### Field & constructor tambahan
 ```java
 private final controller.KurirController kurirCtrl = new controller.KurirController();
 
@@ -222,7 +253,7 @@ public FormKurir() {
 
 ### Event Listener
 
-Klik kanan `btnTambah` → Events → Action:
+`btnTambah` → Action:
 ```java
 private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {
     if (txtNama.getText().trim().isEmpty()
@@ -243,7 +274,7 @@ private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {
 }
 ```
 
-Klik kanan `btnUbah` → Events → Action:
+`btnUbah` → Action:
 ```java
 private void btnUbahActionPerformed(java.awt.event.ActionEvent evt) {
     if (txtId.getText().trim().isEmpty()) {
@@ -263,7 +294,7 @@ private void btnUbahActionPerformed(java.awt.event.ActionEvent evt) {
 }
 ```
 
-Klik kanan `btnHapus` → Events → Action:
+`btnHapus` → Action:
 ```java
 private void btnHapusActionPerformed(java.awt.event.ActionEvent evt) {
     if (txtId.getText().trim().isEmpty()) {
@@ -284,21 +315,10 @@ private void btnHapusActionPerformed(java.awt.event.ActionEvent evt) {
 }
 ```
 
-Klik kanan `btnBersihkan` → Events → Action:
-```java
-private void btnBersihkanActionPerformed(java.awt.event.ActionEvent evt) {
-    bersihkanForm();
-}
-```
+`btnBersihkan` → Action: `bersihkanForm();`
+`btnTutup` → Action: `dispose();`
 
-Klik kanan `btnTutup` → Events → Action:
-```java
-private void btnTutupActionPerformed(java.awt.event.ActionEvent evt) {
-    dispose();
-}
-```
-
-Klik kanan `tblKurir` → Events → Mouse → `mouseClicked`:
+`tblKurir` → Events → Mouse → mouseClicked:
 ```java
 private void tblKurirMouseClicked(java.awt.event.MouseEvent evt) {
     int row = tblKurir.getSelectedRow();
@@ -311,7 +331,7 @@ private void tblKurirMouseClicked(java.awt.event.MouseEvent evt) {
 }
 ```
 
-Tambahkan method helper di akhir class:
+Helper:
 ```java
 private void bersihkanForm() {
     txtId.setText("");
@@ -324,7 +344,7 @@ private void bersihkanForm() {
 
 ---
 
-## 4. FormPaket.java
+## 4. FormPaket.java (Admin)
 
 **JFrame Form baru → nama class: `FormPaket`**
 
@@ -333,18 +353,8 @@ private void bersihkanForm() {
 |---|---|
 | title | `Manajemen Paket` |
 | defaultCloseOperation | `DISPOSE_ON_CLOSE` |
-| size | 1200 × 720 |
 
-### Daftar Komponen
-
-**Panel Header (atas):**
-| Komponen | Variable Name | Text |
-|---|---|---|
-| JPanel | `headerPanel` | background biru |
-| JLabel | `lblHeader` | `Manajemen Paket` |
-| JLabel | `lblSubHeader` | `Input dan kelola data pengiriman paket` |
-
-**Panel Form Input:**
+### Komponen
 | Komponen | Variable Name | Text / Properti |
 |---|---|---|
 | JLabel | `lblResi` | `No Resi` |
@@ -354,39 +364,30 @@ private void bersihkanForm() {
 | JLabel | `lblPenerima` | `Nama Penerima` |
 | JTextField | `txtPenerima` | (kosong) |
 | JLabel | `lblAlamat` | `Alamat Tujuan` |
-| JTextArea | `txtAlamat` | `lineWrap = true`, `wrapStyleWord = true` — bungkus dengan JScrollPane |
+| JTextArea | `txtAlamat` | di dalam JScrollPane, lineWrap=true |
 | JLabel | `lblLayanan` | `Jenis Layanan` |
-| JComboBox | `cbLayanan` | **model:** `Reguler, Express, Cargo` |
+| JComboBox | `cbLayanan` | model: `Reguler, Express, Cargo` |
 | JLabel | `lblBerat` | `Berat (kg)` |
 | JTextField | `txtBerat` | (kosong) |
 | JButton | `btnHitung` | `Hitung Ongkir` |
 | JLabel | `lblTotalCaption` | `Total Biaya` |
 | JLabel | `lblTotalBiaya` | `Rp 0` |
+| JLabel | `lblStatusCaption` | `Status Paket` |
+| JComboBox | `cbStatus` | model: `Diproses, Sedang Dikirim, Terkirim` |
 | JLabel | `lblKurir` | `Kurir` |
-| JComboBox | `cbKurir` | (kosong, diisi runtime) |
-
-**Cara isi model JComboBox `cbLayanan`:**
-Pilih cbLayanan → Properties → `model` → klik tombol `...` → **Custom Code** → masukkan:
-```java
-new javax.swing.DefaultComboBoxModel<>(new String[] { "Reguler", "Express", "Cargo" })
-```
-
-**Panel Tombol:**
-| Komponen | Variable Name | Text |
-|---|---|---|
+| JComboBox | `cbKurir` | (kosong) |
 | JButton | `btnTambah` | `Tambah` |
 | JButton | `btnUbah` | `Ubah` |
 | JButton | `btnHapus` | `Hapus` |
 | JButton | `btnBersihkan` | `Bersihkan` |
 | JButton | `btnTutup` | `Tutup` |
+| JScrollPane + JTable | `tblPaket` | (default) |
 
-**Panel Tabel:**
-| Komponen | Variable Name |
-|---|---|
-| JScrollPane | `scrollTable` |
-| JTable | `tblPaket` |
+**Model JComboBox (custom code):**
+- `cbLayanan`: `new javax.swing.DefaultComboBoxModel<>(new String[] { "Reguler", "Express", "Cargo" })`
+- `cbStatus`: `new javax.swing.DefaultComboBoxModel<>(new String[] { "Diproses", "Sedang Dikirim", "Terkirim" })`
 
-### Tambahkan field di class (import & deklarasi)
+### Field & import
 ```java
 import java.text.NumberFormat;
 import java.util.List;
@@ -406,7 +407,7 @@ public FormPaket() {
 
 ### Event Listener
 
-`btnHitung` → Events → Action:
+`btnHitung` → Action:
 ```java
 private void btnHitungActionPerformed(java.awt.event.ActionEvent evt) {
     Double berat = parseBerat();
@@ -417,7 +418,7 @@ private void btnHitungActionPerformed(java.awt.event.ActionEvent evt) {
 }
 ```
 
-`btnTambah` → Events → Action:
+`btnTambah` → Action:
 ```java
 private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {
     if (!validateInput()) return;
@@ -430,6 +431,7 @@ private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {
                 "Duplikat", JOptionPane.WARNING_MESSAGE);
         return;
     }
+    // Status otomatis di-set ke 'Diproses' oleh controller
     paketCtrl.insert(resi,
             txtPengirim.getText().trim(),
             txtPenerima.getText().trim(),
@@ -442,7 +444,7 @@ private void btnTambahActionPerformed(java.awt.event.ActionEvent evt) {
 }
 ```
 
-`btnUbah` → Events → Action:
+`btnUbah` → Action:
 ```java
 private void btnUbahActionPerformed(java.awt.event.ActionEvent evt) {
     if (txtResi.getText().trim().isEmpty()) {
@@ -460,13 +462,14 @@ private void btnUbahActionPerformed(java.awt.event.ActionEvent evt) {
             txtAlamat.getText().trim(),
             (String) cbLayanan.getSelectedItem(),
             berat,
+            (String) cbStatus.getSelectedItem(),
             getSelectedKurirId());
     paketCtrl.loadTable(tblPaket);
     bersihkanForm();
 }
 ```
 
-`btnHapus` → Events → Action:
+`btnHapus` → Action:
 ```java
 private void btnHapusActionPerformed(java.awt.event.ActionEvent evt) {
     if (txtResi.getText().trim().isEmpty()) {
@@ -478,26 +481,14 @@ private void btnHapusActionPerformed(java.awt.event.ActionEvent evt) {
             "Yakin ingin menghapus paket ini?",
             "Konfirmasi Hapus", JOptionPane.YES_NO_OPTION);
     if (confirm != JOptionPane.YES_OPTION) return;
-
     paketCtrl.delete(txtResi.getText().trim());
     paketCtrl.loadTable(tblPaket);
     bersihkanForm();
 }
 ```
 
-`btnBersihkan` → Events → Action:
-```java
-private void btnBersihkanActionPerformed(java.awt.event.ActionEvent evt) {
-    bersihkanForm();
-}
-```
-
-`btnTutup` → Events → Action:
-```java
-private void btnTutupActionPerformed(java.awt.event.ActionEvent evt) {
-    dispose();
-}
-```
+`btnBersihkan` → Action: `bersihkanForm();`
+`btnTutup` → Action: `dispose();`
 
 `tblPaket` → Events → Mouse → mouseClicked:
 ```java
@@ -514,11 +505,12 @@ private void tblPaketMouseClicked(java.awt.event.MouseEvent evt) {
     txtBerat.setText(String.valueOf(m.getValueAt(row, 5)));
     double total = ((Number) m.getValueAt(row, 6)).doubleValue();
     lblTotalBiaya.setText(rupiah.format(total));
-    selectKurirByName(String.valueOf(m.getValueAt(row, 7)));
+    cbStatus.setSelectedItem(String.valueOf(m.getValueAt(row, 7)));
+    selectKurirByName(String.valueOf(m.getValueAt(row, 8)));
 }
 ```
 
-### Method helper — tambahkan di bawah event handler
+### Helper methods
 ```java
 private void loadKurirCombo() {
     daftarKurir = kurirCtrl.getAll();
@@ -586,6 +578,7 @@ private void bersihkanForm() {
     cbLayanan.setSelectedIndex(0);
     txtBerat.setText("");
     lblTotalBiaya.setText(rupiah.format(0));
+    cbStatus.setSelectedIndex(0);
     if (cbKurir.getItemCount() > 0) cbKurir.setSelectedIndex(0);
     tblPaket.clearSelection();
 }
@@ -593,62 +586,208 @@ private void bersihkanForm() {
 
 ---
 
-## 5. RINGKASAN VARIABLE NAME (WAJIB SAMA PERSIS)
+## 5. FormDashboardKurir.java (BARU, Khusus Kurir)
+
+**JFrame Form baru → nama class: `FormDashboardKurir`**
+
+### Properti JFrame
+| Properti | Nilai |
+|---|---|
+| title | `Dashboard Kurir` |
+| defaultCloseOperation | `EXIT_ON_CLOSE` |
+
+### Komponen
+
+**Panel header / info kurir:**
+| Komponen | Variable Name | Text |
+|---|---|---|
+| JLabel | `lblHeader` | `Dashboard Kurir` |
+| JLabel | `lblInfoKurir` | `Halo, Nama Kurir` |
+
+**Panel detail paket yang terpilih:**
+| Komponen | Variable Name | Text / Properti |
+|---|---|---|
+| JLabel | `lblResi` | `No Resi` |
+| JTextField | `txtResi` | `editable = false` |
+| JLabel | `lblPenerima` | `Penerima` |
+| JTextField | `txtPenerima` | `editable = false` |
+| JLabel | `lblAlamat` | `Alamat` |
+| JTextArea | `txtAlamat` | di dalam JScrollPane, `editable = false` |
+| JLabel | `lblStatusCaption` | `Status Saat Ini` |
+| JTextField | `txtStatus` | `editable = false` |
+| JLabel | `lblUpdateStatus` | `Ubah Status` |
+| JComboBox | `cbStatus` | model: `Diproses, Sedang Dikirim, Terkirim` |
+| JButton | `btnUpdateStatus` | `Update Status` |
+| JButton | `btnRefresh` | `Refresh` |
+| JButton | `btnLogout` | `Logout` |
+
+**Tabel:**
+| Komponen | Variable Name |
+|---|---|
+| JScrollPane + JTable | `tblPaket` |
+
+### Field & constructor
+```java
+private model.User currentUser;
+private final controller.PaketController paketCtrl = new controller.PaketController();
+
+public FormDashboardKurir() {
+    initComponents();
+}
+
+public FormDashboardKurir(model.User user) {
+    initComponents();
+    this.currentUser = user;
+    lblInfoKurir.setText("Halo, " + user.getUsername());
+    if (user.getId_kurir() != null) {
+        paketCtrl.loadTableByKurir(tblPaket, user.getId_kurir());
+    }
+}
+```
+
+### Event Listener
+
+`tblPaket` → Events → Mouse → mouseClicked:
+```java
+private void tblPaketMouseClicked(java.awt.event.MouseEvent evt) {
+    int row = tblPaket.getSelectedRow();
+    if (row < 0) return;
+    javax.swing.table.DefaultTableModel m = (javax.swing.table.DefaultTableModel) tblPaket.getModel();
+    txtResi.setText(String.valueOf(m.getValueAt(row, 0)));
+    txtPenerima.setText(String.valueOf(m.getValueAt(row, 2)));
+    txtAlamat.setText(String.valueOf(m.getValueAt(row, 3)));
+    txtStatus.setText(String.valueOf(m.getValueAt(row, 7)));
+    cbStatus.setSelectedItem(String.valueOf(m.getValueAt(row, 7)));
+}
+```
+
+`btnUpdateStatus` → Action:
+```java
+private void btnUpdateStatusActionPerformed(java.awt.event.ActionEvent evt) {
+    if (txtResi.getText().trim().isEmpty()) {
+        JOptionPane.showMessageDialog(this, "Pilih paket dari tabel terlebih dahulu.",
+                "Peringatan", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+    String statusBaru = (String) cbStatus.getSelectedItem();
+    paketCtrl.updateStatus(txtResi.getText().trim(), statusBaru);
+    if (currentUser != null && currentUser.getId_kurir() != null) {
+        paketCtrl.loadTableByKurir(tblPaket, currentUser.getId_kurir());
+    }
+    bersihkan();
+}
+```
+
+`btnRefresh` → Action:
+```java
+private void btnRefreshActionPerformed(java.awt.event.ActionEvent evt) {
+    if (currentUser != null && currentUser.getId_kurir() != null) {
+        paketCtrl.loadTableByKurir(tblPaket, currentUser.getId_kurir());
+    }
+    bersihkan();
+}
+```
+
+`btnLogout` → Action:
+```java
+private void btnLogoutActionPerformed(java.awt.event.ActionEvent evt) {
+    int confirm = JOptionPane.showConfirmDialog(this,
+            "Yakin ingin logout?", "Konfirmasi", JOptionPane.YES_NO_OPTION);
+    if (confirm == JOptionPane.YES_OPTION) {
+        new FormLogin().setVisible(true);
+        dispose();
+    }
+}
+```
+
+Helper:
+```java
+private void bersihkan() {
+    txtResi.setText("");
+    txtPenerima.setText("");
+    txtAlamat.setText("");
+    txtStatus.setText("");
+    cbStatus.setSelectedIndex(0);
+    tblPaket.clearSelection();
+}
+```
+
+---
+
+## 6. RINGKASAN VARIABLE NAME WAJIB
 
 ### FormLogin
 `txtUsername`, `txtPassword`, `btnLogin`, `btnKeluar`
 
-### FormMenuUtama
+### FormMenuUtama (Admin)
 `btnKurir`, `btnPaket`, `btnLogout`, `lblWelcome`
 
-### FormKurir
+### FormKurir (Admin)
 `txtId`, `txtNama`, `txtPlat`, `txtHp`, `btnTambah`, `btnUbah`, `btnHapus`, `btnBersihkan`, `btnTutup`, `tblKurir`
 
-### FormPaket
-`txtResi`, `txtPengirim`, `txtPenerima`, `txtAlamat`, `cbLayanan`, `txtBerat`, `btnHitung`, `lblTotalBiaya`, `cbKurir`, `btnTambah`, `btnUbah`, `btnHapus`, `btnBersihkan`, `btnTutup`, `tblPaket`
+### FormPaket (Admin)
+`txtResi`, `txtPengirim`, `txtPenerima`, `txtAlamat`, `cbLayanan`, `txtBerat`, `btnHitung`, `lblTotalBiaya`, `cbStatus`, `cbKurir`, `btnTambah`, `btnUbah`, `btnHapus`, `btnBersihkan`, `btnTutup`, `tblPaket`
+
+### FormDashboardKurir (Kurir)
+`lblInfoKurir`, `txtResi`, `txtPenerima`, `txtAlamat`, `txtStatus`, `cbStatus`, `btnUpdateStatus`, `btnRefresh`, `btnLogout`, `tblPaket`
 
 ---
 
-## 6. ENTRY POINT
+## 7. ENTRY POINT
 
 Set main class project ke `view.FormLogin`:
 **Klik kanan project → Properties → Run → Main Class → `view.FormLogin`**
 
 ---
 
-## 7. LAYOUT TIPS (opsional, untuk tampilan rapi)
+## 8. LAYOUT TIPS (opsional)
 
-- Pakai **Free Design** (default NetBeans) — drag komponen, ikuti garis panduan biru yang muncul untuk auto-align.
-- Gunakan **JPanel** terpisah untuk mengelompokkan: header, form input, tombol, tabel.
-- JTable sebaiknya di dalam **JScrollPane** (drag JScrollPane dulu, lalu drag JTable ke dalamnya).
-- JTextArea (untuk `txtAlamat`) juga sebaiknya di dalam **JScrollPane**.
-- Border panel: klik kanan panel → Properties → `border` → pilih **Titled Border** atau **Line Border**.
+- **Free Design** (default NetBeans) — drag komponen, ikuti garis biru panduan.
+- Kelompokkan komponen dengan **JPanel** (Titled Border agar rapi).
+- JTable WAJIB dalam **JScrollPane**; drag JScrollPane dulu, lalu drag JTable ke dalamnya.
+- JTextArea (`txtAlamat`) juga dalam **JScrollPane**.
 
 ---
 
-## 8. STRUKTUR PACKAGE YANG TIDAK BOLEH DIHAPUS
+## 9. KOLOM TABEL PAKET (untuk reference saat MouseListener)
 
-File-file berikut harus tetap ada (**jangan dihapus**):
+Index kolom di JTable paket (setelah `loadTable` / `loadTableByKurir`):
+
+| Index | Kolom |
+|---|---|
+| 0 | No Resi |
+| 1 | Pengirim |
+| 2 | Penerima |
+| 3 | Alamat Tujuan |
+| 4 | Layanan |
+| 5 | Berat (kg) |
+| 6 | Total Biaya |
+| 7 | Status |
+| 8 | Kurir |
+
+---
+
+## 10. FILE YANG TIDAK BOLEH DIHAPUS
 
 ```
 koneksi/
-  KoneksiDB.java           ← sudah diperbarui manual
+  KoneksiDB.java
 model/
-  User.java
+  User.java                ← field: id_user, username, password, role, id_kurir
   Kurir.java
-  Paket.java
-  Orang.java               ← (jika masih ada, bisa dihapus — tidak dipakai)
+  Paket.java               ← field: + status_paket
   IDAO.java
   KurirDAO.java
-  PaketDAO.java
+  PaketDAO.java            ← method: getByKurir(), updateStatus()
+  UserDAO.java             ← BARU: findByCredentials()
   LayananEkspedisi.java
   LayananReguler.java
   LayananExpress.java
   LayananCargo.java
 controller/
-  LoginController.java
+  LoginController.java     ← method: login() return User
   KurirController.java
-  PaketController.java
+  PaketController.java     ← method: loadTableByKurir(), updateStatus(), insert auto-status
 ```
 
-Hanya **package `view`** yang akan dihapus dan dibuat ulang via NetBeans drag & drop.
+Package `view` kosong — tinggal kamu drag & drop sesuai petunjuk di atas.
